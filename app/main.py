@@ -4,6 +4,7 @@ from app.common.constants import DATABASE_URL
 from contextlib import asynccontextmanager
 from app.common.models import AccountCreate
 from app.helpers.account_helper import get_password_hash, verify_login
+from fastapi.middleware.cors import CORSMiddleware
 
 engine = None
 
@@ -19,6 +20,14 @@ async def lifespan(app: FastAPI):
         engine.dispose()
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 
 def get_db():
@@ -60,12 +69,35 @@ def create_account(account: AccountCreate, db=Depends(get_db)):
             {"username": account.username, "passwordhash": hashed_password, "email": account.email}
         )
         db.commit()
-        return {"message": "Account created successfully"}
+        return login(account, db)
     except Exception as e:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Account creation failed: {str(e)}"
+        )
+    
+@app.post("/login")
+def login(account: AccountCreate, db=Depends(get_db)):
+    try:
+        if not verify_login(account.username, account.password, db):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password"
+            )
+        
+        db.execute(
+            text("UPDATE accounts SET last_login=NOW() WHERE username=:username"),
+            {"username": account.username}
+        )
+        db.commit()
+
+        return {"message": "Login successful", "username": account.username}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {str(e)}"
         )
 
 

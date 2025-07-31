@@ -57,10 +57,7 @@ def create_account(account: AccountCreate, db=Depends(get_db)):
             {"username": account.username, "email": account.email}
         ).first()
         if user_exists:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username or email already exists."
-            )
+            return {"error": "Username or email already exists"}
 
         hashed_password = get_password_hash(account.password)
         db.execute(
@@ -72,19 +69,21 @@ def create_account(account: AccountCreate, db=Depends(get_db)):
         return login(account, db)
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Account creation failed: {str(e)}"
-        )
+        return {"error": f"Account creation failed: {str(e)}"}
     
 @app.post("/login")
 def login(account: AccountCreate, db=Depends(get_db)):
     try:
+        # Check if account exists
+        existing_account = db.execute(
+            text("SELECT * FROM accounts WHERE username=:username"),
+            {"username": account.username}
+        ).first()
+        if not existing_account:
+            return {"error": "Account does not exist"}
+        
         if not verify_login(account.username, account.password, db):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid username or password"
-            )
+            return {"error": "Incorrect password"}
         
         db.execute(
             text("UPDATE accounts SET last_login=NOW() WHERE username=:username"),
@@ -95,9 +94,6 @@ def login(account: AccountCreate, db=Depends(get_db)):
         return {"message": "Login successful", "username": account.username}
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login failed: {str(e)}"
-        )
+        return {"error": f"Login failed: {str(e)}"}
 
 

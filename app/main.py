@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import create_engine, text
 from app.common.constants import DATABASE_URL
 from contextlib import asynccontextmanager
@@ -6,16 +6,15 @@ from app.common.models import AccountCreate
 from app.helpers.account_helper import get_password_hash, verify_login
 from fastapi.middleware.cors import CORSMiddleware
 
+import httpx
+
 engine = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global engine
-
     engine = create_engine(DATABASE_URL, echo=True, pool_size=2, max_overflow=1)
-
     yield
-
     if engine:
         engine.dispose()
 
@@ -95,5 +94,45 @@ def login(account: AccountCreate, db=Depends(get_db)):
     except Exception as e:
         db.rollback()
         return {"error": f"Login failed: {str(e)}"}
+    
+@app.post("/addBookFromISBN")
+def add_book_from_isbn(isbn: str, db=Depends(get_db)):
+    url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data"
+    try:
+        with httpx.Client() as client:
+            response = client.get(url)
+            response.raise_for_status()
+            data = response.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"Upstream HTTP error: {e.response.status_code}")
+    except httpx.RequestError:
+        raise HTTPException(status_code=503, detail="Failed to reach upstream")
+    
+    book_data = data.get(f"ISBN:{isbn}", {})
+    if not book_data:
+        raise HTTPException(status_code=404, detail="Book not found")
+    
+    title = book_data.get("title")
+    authors = [author.get("name") for author in book_data.get("authors", [])]
+    publishers = [publisher.get("name") for publisher in book_data.get("publishers", [])]
+    publication_date = book_data.get("publish_date")
+    genres = [subject.get("name") for subject in book_data.get("subjects", [])]
+    pages = book_data.get("number_of_pages")
+    image = book_data.get("cover", {}).get("medium")
+
+    try:
+        db.execute(
+            text('''INSERT INTO books(isbn, title, authors, publishers, publication_date, genres, pages, image)
+                    VALUES (:isbn, :title, :authors, :publishers, :publication_date, :genres, :pages, :image)'''),
+                {"isbn": isbn, "title": title, "authors": authors, "publishers": publishers,
+                 "publication_date": publication_date, "genres": genres, "pages": int(pages), "image": image}
+        )
+        db.commit()
+        return {"message": "Book added successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to add book: {str(e)}")
+
+
 
 

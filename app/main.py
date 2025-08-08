@@ -2,7 +2,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import create_engine, text
 from app.common.constants import DATABASE_URL
 from contextlib import asynccontextmanager
-from app.common.models import AccountCreate
+from app.common.models import AccountCreate, ISBNRequest
 from app.helpers.account_helper import get_password_hash, verify_login
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -104,7 +104,8 @@ def login(account: AccountCreate, db=Depends(get_db)):
 # Admin endpoint for adding a new book to the database
     
 @app.post("/addBookFromISBN")
-def add_book_from_isbn(isbn: str, db=Depends(get_db)):
+def add_book_from_isbn(request: ISBNRequest, db=Depends(get_db)):
+    isbn = request.isbn
     url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data"
     try:
         with httpx.Client() as client:
@@ -140,6 +141,20 @@ def add_book_from_isbn(isbn: str, db=Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to add book: {str(e)}")
+    
+@app.post("/removeBookFromISBN")
+def remove_book_from_isbn(request: ISBNRequest, db=Depends(get_db)):
+    isbn = request.isbn
+    try:
+        db.execute(
+            text('''DELETE FROM books where isbn = :isbn'''),
+            {"isbn": isbn}
+        )
+        db.commit()
+        return {"message": "Book removed successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete book: {str(e)}")
     
 # Reviews endpoints
     

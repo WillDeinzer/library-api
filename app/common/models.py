@@ -7,3 +7,7 @@ class AccountCreate(BaseModel):
 
 class ISBNRequest(BaseModel):
     isbn: str
+
+class WishlistRequest(BaseModel):
+    account_id: int
+    isbn: str

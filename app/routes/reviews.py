@@ -2,13 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from app.helpers.db_helper import get_db
 from app.helpers.contest_helper import choose_winner
+from app.helpers.reviews_helper import process_reviews
 
 router = APIRouter()
-
-@router.get("/get_all_reviews")
-def get_all_reviews(db=Depends(get_db)):
-    result = db.execute(text("SELECT * FROM reviews"))
-    return [dict(row._mapping) for row in result.fetchall()]
 
 @router.post("/submitReview")
 def submit_review(request: dict, db=Depends(get_db)):
@@ -29,18 +25,22 @@ def submit_review(request: dict, db=Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to submit review: {str(e)}")
     
-@router.get("/get_reviews_by_book")
+@router.get("/getReviewsByBook")
 def get_reviews_by_book(book_isbn: str, db=Depends(get_db)):
     try:
         result = db.execute(
-            text("SELECT * FROM reviews WHERE book_isbn = :book_isbn"),
-            {"book_isbn": book_isbn}
+            text('''SELECT r.review_text, r.rating, r.review_date, r.book_isbn, a.username
+                    FROM reviews r join accounts a on r.account_id = a.account_id WHERE r.book_isbn = :book_isbn'''),
+                {"book_isbn": book_isbn}
         )
-        return [dict(row._mapping) for row in result.fetchall()]
+        reviews = [dict(row._mapping) for row in result.fetchall()]
+        process_reviews(reviews)
+        print(reviews)
+        return reviews
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve reviews: {str(e)}")
     
-@router.get("/select_contest_winner")
+@router.get("/selectContestWinner")
 def select_contest_winner(db=Depends(get_db)):
     try:
         rows = db.execute(

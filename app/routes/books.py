@@ -3,6 +3,7 @@ from sqlalchemy import text
 import httpx
 from app.helpers.db_helper import get_db
 from app.common.models import ISBNRequest, WishlistRequest
+from app.helpers.llm_helper import generate_summary, generate_embedding
 
 router = APIRouter()
 
@@ -42,7 +43,14 @@ def add_book_from_isbn(request: ISBNRequest, db=Depends(get_db)):
             text('''INSERT INTO books(isbn, title, authors, publishers, publication_date, genres, pages, image)
                     VALUES (:isbn, :title, :authors, :publishers, :publication_date, :genres, :pages, :image)'''),
             {"isbn": isbn, "title": title, "authors": authors, "publishers": publishers,
-             "publication_date": publication_date, "genres": genres, "pages": int(pages), "image": image}
+             "publication_date": publication_date, "genres": genres, "pages": int(pages) if pages else None, "image": image}
+        )
+        summary = generate_summary(title, authors[0] if len(authors) > 0 else "", isbn, "../prompts/summary_prompt.txt")
+        embedding = generate_embedding(summary)
+        db.execute(
+            text('''INSERT INTO book_embeddings(isbn, summary, embedding)
+                    VALUES (:isbn, :summary, :embedding)'''),
+            {"isbn": isbn, "summary": summary, "embedding": embedding}
         )
         db.commit()
         return {"message": "Book added successfully"}
@@ -56,6 +64,10 @@ def remove_book_from_isbn(request: ISBNRequest, db=Depends(get_db)):
     try:
         db.execute(
             text('''DELETE FROM books where isbn = :isbn'''),
+            {"isbn": isbn}
+        )
+        db.execute(
+            text('''DELETE FROM book_embeddings WHERE isbn=:isbn'''),
             {"isbn": isbn}
         )
         db.commit()

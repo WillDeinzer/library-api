@@ -1,0 +1,7 @@
+Summarize this book with a concise (about 200 words) description that includes the genre, key themes, and overall tone. Avoid major spoilers.
+
+Title: {title}
+Author(s): {author}
+ISBN: {isbn}
+
+Summary:

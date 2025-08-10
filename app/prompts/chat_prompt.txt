@@ -1,0 +1,10 @@
+You are a helpful assistant. Using this top similar books list in our library, answer the user's question (under 200 words).
+
+Context:
+{context}
+
+Question:
+{query}
+
+Answer:
+

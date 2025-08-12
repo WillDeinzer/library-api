@@ -23,7 +23,7 @@ def generate_summary(title: str, author: str, isbn: str, prompt_path: str) -> st
 
     return response.output_text
 
-def generate_query_response(query: str, most_similar, prompt_path: str) -> str:
+def generate_query_response(query: str, most_similar, prompt_path: str):
     prompt_template = load_prompt(prompt_path)
 
     context_parts = []
@@ -37,13 +37,18 @@ def generate_query_response(query: str, most_similar, prompt_path: str) -> str:
     context_text = "\n---\n".join(context_parts)
     prompt = prompt_template.format(context=context_text, query=query)
 
-    response = client.responses.create(
+    stream = client.responses.create(
         model="gpt-3.5-turbo",
         input=prompt,
-        max_output_tokens=400
+        max_output_tokens=400,
+        stream=True
     )
 
-    return response.output_text
+    for chunk in stream:
+        if chunk.type == 'response.output_text.delta':
+            content_part = chunk.delta
+            if content_part:
+                yield content_part
 
 def generate_embedding(text: str) -> list[float]:
     response = client.embeddings.create(

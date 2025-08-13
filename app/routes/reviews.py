@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy import text
 from app.helpers.db_helper import get_db
 from app.helpers.contest_helper import choose_winner
@@ -26,10 +26,10 @@ def submit_review(request: dict, db=Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to submit review: {str(e)}")
     
 @router.get("/getReviewsByBook")
-def get_reviews_by_book(book_isbn: str, db=Depends(get_db)):
+def get_reviews_by_book(book_isbn: str = Header(..., alias="isbn"), db=Depends(get_db)):
     try:
         result = db.execute(
-            text('''SELECT r.review_text, r.rating, r.review_date, r.book_isbn, a.username
+            text('''SELECT r.review_id, r.review_text, r.rating, r.review_date, r.book_isbn, a.username, r.likes
                     FROM reviews r join accounts a on r.account_id = a.account_id WHERE r.book_isbn = :book_isbn'''),
                 {"book_isbn": book_isbn}
         )
@@ -39,6 +39,31 @@ def get_reviews_by_book(book_isbn: str, db=Depends(get_db)):
         return reviews
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve reviews: {str(e)}")
+    
+@router.post("/modifyLikeCount")
+def modify_like_count(request: dict, db=Depends(get_db)):
+    review_id = request.get("review_id")
+    action = request.get("action")
+
+    if action not in ("like", "unlike"):
+        raise HTTPException(status_code=400, detail="Invalid action")
+
+    increment = 1 if action == "like" else -1
+
+    try:
+        db.execute(
+            text("""
+                UPDATE reviews
+                SET likes = likes + :inc
+                WHERE review_id = :review_id
+            """),
+            {"inc": increment, "review_id": review_id}
+        )
+        db.commit()
+        return {"message": "Review likes updated"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Likes action failed: {str(e)}")
     
 @router.get("/selectContestWinner")
 def select_contest_winner(db=Depends(get_db)):

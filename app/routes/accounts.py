@@ -10,11 +10,11 @@ router = APIRouter()
 def create_account(account: AccountCreate, db=Depends(get_db)):
     try:
         user_exists = db.execute(
-            text("SELECT 1 FROM accounts WHERE username=:username OR email=:email"),
-            {"username": account.username, "email": account.email}
+            text("SELECT 1 FROM accounts WHERE username=:username"),
+            {"username": account.username}
         ).first()
         if user_exists:
-            return {"error": "Username or email already exists"}
+            return {"error": "Username or already exists"}
 
         hashed_password = get_password_hash(account.password)
         db.execute(

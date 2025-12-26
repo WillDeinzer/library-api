@@ -77,12 +77,11 @@ def remove_book_from_isbn(request: ISBNRequest, db=Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to delete book: {str(e)}")
     
 @router.get('/getBookSummary')
-def get_book_summary(request: ISBNRequest, db=Depends(get_db)):
-    isbn = request.isbn
+def get_book_summary(book_isbn: str = Header(..., alias="isbn"), db=Depends(get_db)):
     try:
         result = db.execute(
             text('''SELECT summary from book_embeddings WHERE isbn=:isbn'''),
-            {"isbn": isbn}
+            {"isbn": book_isbn}
         )
         row = result.first()
         return dict(row._mapping) if row else None

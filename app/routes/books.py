@@ -76,6 +76,20 @@ def remove_book_from_isbn(request: ISBNRequest, db=Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete book: {str(e)}")
     
+@router.get('/getBookSummary')
+def get_book_summary(request: ISBNRequest, db=Depends(get_db)):
+    isbn = request.isbn
+    try:
+        result = db.execute(
+            text('''SELECT summary from book_embeddings WHERE isbn=:isbn'''),
+            {"isbn": isbn}
+        )
+        row = result.first()
+        return dict(row._mapping) if row else None
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve book summary: {str(e)}")
+        
 @router.post("/addToWishlist")
 def add_book_to_wishlist(request: WishlistRequest, db=Depends(get_db)):
     account_id = request.account_id
